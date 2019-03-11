@@ -20,6 +20,8 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 public class ParticleFilter {
@@ -60,12 +62,29 @@ public class ParticleFilter {
         this.particles=new Particle[particlecount];
 		// TODO: initialize particles (uniform random distribution over the map)
 
-
+        // init every particle
+        for (int i = 0; i < particlecount;) {
+            int x = rnd.nextInt(map.getWidth());
+            int y = rnd.nextInt(map.getHeight());
+            // ignore if coordinates do not exist (obstacle)
+            if (map.getData(x, y)) {
+                particles[i] = new Particle(x, y, rnd.nextDouble() * 2 * Math.PI, 1/particlecount);
+                i++;
+            }
+        }
     }
 	
 	// this is the main particle filter function that is called after each step
 	public void step(double[] sensorvalues,int action, double value){
-		// TODO: fill out
+
+        // transition model
+        applyAction(action, value);
+
+        // sensor model
+        applyObservation(sensorvalues);
+
+        // particle resampling
+        particles = resample(particles, 0.1);
     }
 
 	// apply the transition model to all particles
@@ -82,26 +101,61 @@ public class ParticleFilter {
 			// Note that there is some uncertainty in the movement.
 			// The error in the distance travelled is distributed according to
 			// a gaussian distribution with standard deviation movnoise*value.
-			// TODO: fill out
+
+            p.setX(transitionX(p, value));
+            p.setY(transitionY(p, value));
+
 
         } else if (action==ACTION_ROTATE){
 			// value is the angle of the rotation (by how much the robot rotates clockwise)
 			// Note that there is some uncertainty in the rotation.
 			// The error in the angle is distributed according to
 			// a gaussian distribution with standard deviation rotnoise*value.
-			// TODO: fill out
+
+            p.setA(transitionOrientation(p, value));
 
         }
 		
 	}
+
+	private double transitionX(Particle p, double value) {
+        return p.getX() + calcDistance(value) * Math.sin(p.getA());
+    }
+
+    private double transitionY(Particle p, double value) {
+        return p.getY() - calcDistance(value) * Math.cos(p.getA());
+    }
+
+    private double transitionOrientation(Particle p, double value) {
+        return p.getA() + value + rnd.nextGaussian() * (rotnoise * value);
+    }
+
+	private double calcDistance(double value) {
+        return value + (movnoise * value) * rnd.nextGaussian();
+    }
 
 	// apply the sensor model to all particles
     private void applyObservation(double[] sensorvalues){
 		// TODO: weight each particle according to observation probability
 	    	// Hint: use map.observationProbability(..)
 
+        double[] weights = new double[particles.length];
+        double sum = 0;
+        for (int i = 0; i < particles.length; i++) {
+            double probability = getObservationProbability(sensorvalues, particles[i]);
+            sum += probability;
+            weights[i] = probability;
+        }
+
 		// TODO: normalize weights, so they sum up to 1
+        normalizeWeights(weights, sum);
 		
+    }
+
+    private void normalizeWeights(double[] weights, double sum) {
+        for (int i = 0; i < particles.length; i++) {
+            particles[i].setW(weights[i]/sum);
+        }
     }
 
 	// returns P(e|x)
